@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Todo App</title>
+
+    <!-- Compiled and minified CSS -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/css/materialize.min.css" />
+
+    <style>
+        body {
+            background: rgb(54, 217, 182);
+            background: linear-gradient(90deg,
+                    rgba(54, 217, 182, 1) 0%,
+                    rgba(32, 152, 126, 1) 43%,
+                    rgba(0, 212, 255, 1) 100%);
+        }
+
+        .my-wrapper {
+            height: 100%;
+            margin-top: 4rem;
+        }
+
+        hr.personalizado {
+            border: none;
+            height: 20px;
+            width: 100%;
+            height: 50px;
+            margin-top: 0;
+            border-bottom: 1px solid #cccccc;
+            box-shadow: 0 20px 20px -20px rgb(126, 126, 126);
+            margin: -80px auto 10px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container my-wrapper">
+        <div class="row">
+            <div class="col s8 offset-s2">
+                <div class="card z-depth-5">
+                    <div class="card-content">
+                        <span class="card-title center-align">ToDo App</span>
+                        <form action="" id="form-wrapper">
+                            <div class="row">
+                                <div class="input-field col s10">
+                                    <input id="add_task" type="text" class="validate" />
+                                    <label for="add_task">Add Task</label>
+                                </div>
+                                <div style="padding-top: 1.5rem;">
+                                    <button class="btn waves-effect waves-light btn-small">
+                                        Submit
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                    <hr class="personalizado" />
+                    <div class="card-content">
+                        <div id="list-wrapper"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/1.0.0/js/materialize.min.js"></script>
+
+    <script>
+        //Copiado da documentação do Django para armazenar o token CSRF da sessão
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== "") {
+                const cookies = document.cookie.split(";");
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    // Does this cookie string begin with the name we want?
+                    if (cookie.substring(0, name.length + 1) === name + "=") {
+                        cookieValue = decodeURIComponent(
+                            cookie.substring(name.length + 1)
+                        );
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+        const csrftoken = getCookie("csrftoken");
+
+        var activeItem = null;
+
+        //Monta a lista quando a pagina é carregada
+        buildlist();
+
+        //variável para guardar mais tarde a lista montada e reutilizar para atualizar sem glitch
+        var list_snapshot = []
+
+        function buildlist() {
+            var wrapper = document.getElementById("list-wrapper");
+            //wrapper.innerHTML = "";
+
+            var url = "http://127.0.0.1:8000/api/task-list";
+
+            fetch(url)
+                .then((resp) => resp.json())
+                .then(function (data) {
+                    console.log("Data: ", data);
+
+                    var list = data;
+                    for (var i in list) {
+                        //remover itens sem atualiar a tela
+                        try {
+                            document.getElementById(`data-row-${i}`).remove()
+                        } catch (err) {}
+
+                        var title = `<span class="title">${list[i].title}</span>`
+
+                        //verifica se o item atual esta como completo ou nao
+                        if (list[i].completed == true) {
+                            var title = `<strike class="title">${list[i].title}</strike>`
+                        }
+
+                        var item = `
+                            <div class="row hoverable" id="data-row-${i}" style="padding: 20px;">
+                                <div class="col s7 m8 ">
+                                    ${title}
+                                </div>
+                                <div class="col s2">
+                                    <button class="btn waves-effect waves-light btn-small edit">Edit</button>
+                                </div>
+                                <div class="col s2">
+                                    <button class="btn waves-effect waves-light btn-small red delete">Delete</button>
+                                </div>
+                            </div>
+                            
+                        `;
+
+                        wrapper.innerHTML += item;
+                    }
+
+                    // faz a validação da lista para excluir itens repetidos e arrumar a quantidade da lista
+                    if (list_snapshot.length > list.length) {
+                        for (var i = list.length; i < list_snapshot.length; i++) {
+                            document.getElementById(`data-row-${i}`).remove()
+                        }
+                    }
+
+                    list_snapshot = list
+
+                    for (var i in list) {
+                        var editBtn = document.getElementsByClassName("edit")[i];
+                        var deleteBtn = document.getElementsByClassName("delete")[i];
+                        var title = document.getElementsByClassName("title")[i];
+
+                        //funcionalidades do botao de editar
+                        editBtn.addEventListener("click", (function (item) {
+                            return function () {
+                                editItem(item);
+                            };
+                        })(list[i]));
+
+                        //funcionalidades do botao de deletar
+                        deleteBtn.addEventListener("click", (function (item) {
+                            return function () {
+                                deleteItem(item);
+                            };
+                        })(list[i]));
+
+                        //funcionalidadesdo para marcar como completo
+                        title.addEventListener("click", (function (item) {
+                            return function () {
+                                strikeUnstrike(item);
+                            };
+                        })(list[i]));
+                    }
+                });
+        }
+
+        var form = document.getElementById("form-wrapper");
+        form.addEventListener("submit", function (e) {
+            e.preventDefault();
+            var url = "http://127.0.0.1:8000/api/task-create/";
+
+            
+            if (activeItem != null) {
+                var url = `http://127.0.0.1:8000/api/task-update/${activeItem.id}/`;
+                activeItem = null;
+            }
+
+            var title = document.getElementById("add_task").value;
+            fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-type": "application/json",
+                    "X-CSRFToken": csrftoken,
+                },
+                body: JSON.stringify({
+                    title: title,
+                }),
+            }).then(function (response) {
+                buildlist();
+                document.getElementById("form-wrapper").reset();
+            });
+        });
+
+        function editItem(item) {
+            console.log("Item clicked: ", item);
+            activeItem = item;
+            document.getElementById("add_task").value = activeItem.title;
+        }
+
+        function deleteItem(item) {
+            console.log("Delete clicked: ", item);
+            fetch(`http://127.0.0.1:8000/api/task-delete/${item.id}/`, {
+                method: 'DELETE',
+                headers: {
+                    "Content-type": "application/json",
+                    "X-CSRFToken": csrftoken,
+                }
+            }).then((response) => {
+                buildlist()
+            })
+        }
+
+        function strikeUnstrike(item) {
+            console.log("Strike clicked: ", item);
+
+            item.completed = !item.completed
+
+            fetch(`http://127.0.0.1:8000/api/task-update/${item.id}/`, {
+                method: 'POST',
+                headers: {
+                    "Content-type": "application/json",
+                    "X-CSRFToken": csrftoken,
+                },
+                body: JSON.stringify({
+                    'title': item.title,
+                    'completed': item.completed
+                })
+            }).then((response) => {
+                buildlist()
+            })
+        }
+    </script>
+</body>
+
+</html>
